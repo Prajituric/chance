@@ -648,13 +648,15 @@ async function runChatBotCycle() {
     
     // Launch browser with options to hide automation indicators
     const browser = await chromium.launch({
-        headless: false,
-        args: [
-            '--no-sandbox',
-            '--disable-dev-shm-usage',
-            '--disable-blink-features=AutomationControlled'
-        ]
-    });
+    headless: true,
+    args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-blink-features=AutomationControlled'
+    ]
+});
+
     
     try {
         // Login to the platform
