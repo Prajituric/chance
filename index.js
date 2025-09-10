@@ -175,19 +175,6 @@ async function loginToAlphaDate(browser, email, password) {
     await handleSpecificErrorPopup(page);
     
     try {
-        // Create a new browser context with viewport & user agent
-        const context = await browser.newContext({
-            viewport: { width: 1200, height: 800 },
-            userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-        });
-        
-        // Hide automation flags (navigator.webdriver)
-        await context.addInitScript(() => {
-            Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-        });
-        
-        const page = await context.newPage();
-        
         // Go to https://alpha.date
         console.log('Navigating to https://alpha.date...');
         await page.goto('https://alpha.date');
@@ -646,8 +633,10 @@ async function processChatsAndSendMessages(page) {
 async function runChatBotCycle() {
     console.log('Starting chat bot cycle...');
     
-    // Connect to Browserless instead of launching locally
-    const browser = await chromium.connect({ wsEndpoint: process.env.BROWSERLESS_URL });
+    // Connect to Browserless instead of launching locally - FIXED LINE
+    const browser = await chromium.connect({
+        wsEndpoint: `wss://chrome.browserless.io?token=${process.env.BROWSERLESS_TOKEN}`
+    });
     
     try {
         // Login to the platform
