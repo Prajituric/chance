@@ -635,8 +635,8 @@ async function runChatBotCycle() {
     
     // Connect to Browserless instead of launching locally - FIXED LINE
     const browser = await chromium.connect({
-        wsEndpoint: `wss://chrome.browserless.io?token=${process.env.BROWSERLESS_TOKEN}`
-    });
+    wsEndpoint: `wss://production-sfo.browserless.io?token=${process.env.BROWSERLESS_TOKEN}`
+});
     
     try {
         // Login to the platform
