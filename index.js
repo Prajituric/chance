@@ -1,20 +1,12 @@
 require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
-const { chromium } = require('playwright-core');
+const { chromium } = require('playwright');
 
 // Global timeout configuration
 const TIMEOUT = 60000; // 60 seconds timeout
 
 // Helper function for timeout promises
-function withTimeout(promise, timeoutMs, errorMessage = 'Operation timed out') {
-    return Promise.race([
-        promise,
-        new Promise((_, reject) => 
-            setTimeout(() => reject(new Error(errorMessage)), timeoutMs)
-        )
-    ]);
-}
 
 // Load icebreaker messages
 const icebreakers = JSON.parse(fs.readFileSync(path.join(__dirname, 'icebreakers.json'), 'utf-8'));
@@ -652,25 +644,19 @@ async function runChatBotCycle() {
     console.log('Starting chat bot cycle...');
     
     try {
-        // Connect to Browserless with timeout
-        const browser = await withTimeout(
-            chromium.connect({
-                wsEndpoint: `wss://production-sfo.browserless.io?token=${process.env.BROWSERLESS_TOKEN}`
-            }),
-            TIMEOUT,
-            'Browser connection timed out'
-        );
-        
-        console.log('✅ Successfully connected to Browserless');
+        const browser = await chromium.launch({
+            headless: false,
+            args: [
+                '--no-sandbox',
+                '--disable-dev-shm-usage',
+                '--disable-blink-features=AutomationControlled'
+            ]
+        });
         
         try {
             // Login to the platform
             console.log('Logging in to platform...');
-            const result = await withTimeout(
-                loginToPlatform(browser, process.env.LOGIN, process.env.PASSWORD),
-                TIMEOUT,
-                'Login process timed out'
-            );
+            const result = await loginToPlatform(browser, process.env.LOGIN, process.env.PASSWORD);
             
             if (!result) {
                 console.error('Login failed');
@@ -737,8 +723,12 @@ async function runChatBotCycle() {
         }
         
     } catch (error) {
-        console.error('❌ Browser connection failed:', error.message);
+        console.error('An error occurred:', error);
         return false;
+    } finally {
+        // Close the browser
+        console.log('Closing browser...');
+        await browser.close();
     }
 }
 
