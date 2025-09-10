@@ -191,7 +191,7 @@ async function loginToAlphaDate(browser, email, password) {
     try {
         // Go to https://alpha.date
         console.log('Navigating to https://alpha.date...');
-        await page.goto('https://alpha.date', { waitUntil: 'networkidle', timeout: TIMEOUT });
+        await page.goto('https://alpha.date/chat', { waitUntil: 'networkidle', timeout: TIMEOUT });
         console.log('✅ Page loaded successfully');
         
         // Wait for and fill email & password using multiple fallback selectors
@@ -356,7 +356,7 @@ async function loginToPlatform(browser, email, password) {
     console.log('Logging in to platform...');
     
     // Check platform URL (process.env.PLATFORM_URL)
-    const platformUrl = process.env.PLATFORM_URL || 'https://alpha.date';
+    const platformUrl = process.env.PLATFORM_URL || 'https://alpha.date/chat';
     console.log(`Platform URL: ${platformUrl}`);
     
     // If alpha.date → call loginToAlphaDate()
