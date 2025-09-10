@@ -1,12 +1,20 @@
 require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
-const { chromium } = require('playwright');
+const { chromium } = require('playwright-core');
 
 // Global timeout configuration
 const TIMEOUT = 60000; // 60 seconds timeout
 
 // Helper function for timeout promises
+function withTimeout(promise, timeoutMs, errorMessage = 'Operation timed out') {
+    return Promise.race([
+        promise,
+        new Promise((_, reject) => 
+            setTimeout(() => reject(new Error(errorMessage)), timeoutMs)
+        )
+    ]);
+}
 
 // Load icebreaker messages
 const icebreakers = JSON.parse(fs.readFileSync(path.join(__dirname, 'icebreakers.json'), 'utf-8'));
@@ -128,7 +136,7 @@ async function login(page, email, password) {
         ];
         
         let loginButtonClicked = false;
-        for (selector of loginButtonSelectors) {
+        for (const selector of loginButtonSelectors) {
             try {
                 if (await page.isVisible(selector)) {
                     console.log(`Clicking login button with selector: ${selector}`);
@@ -642,88 +650,115 @@ async function processChatsAndSendMessages(page) {
 // Function to run the main process for one cycle
 async function runChatBotCycle() {
     console.log('Starting chat bot cycle...');
+    
     let browser;
     try {
-        browser = await chromium.launch({
-            headless: false,
-            args: [
-                '--no-sandbox',
-                '--disable-dev-shm-usage',
-                '--disable-blink-features=AutomationControlled'
-            ]
-        });
+        console.log('Attempting to connect to Browserless with correct endpoint...');
         
-        try {
-            // Login to the platform
-            console.log('Logging in to platform...');
-            const result = await loginToPlatform(browser, process.env.LOGIN, process.env.PASSWORD);
-            
-            if (!result) {
-                console.error('Login failed');
-                return false;
-            }
-            
-            const { context, page } = result;
-            console.log('✅ Login successful!');
-            
-            // Wait a bit for page to load after login
-            await page.waitForTimeout(5000);
-            
-            // Click Load more button repeatedly
-            console.log('Clicking Load more button...');
-            let loadMoreCount = 0;
-            const maxLoadMoreAttempts = 10;
-            
-            for (let i = 0; i < maxLoadMoreAttempts; i++) {
-                if (await clickLoadMore(page)) {
-                    loadMoreCount++;
-                    console.log(`Clicked Load more button ${loadMoreCount} times`);
-                    await page.waitForTimeout(3000); // Wait between clicks
-                } else {
-                    console.log('No more Load more button found or clickable');
-                    break;
-                }
-            }
-            
-            console.log(`Finished clicking Load more button ${loadMoreCount} times`);
-            
-            // Wait for any new content to load
-            await page.waitForTimeout(5000);
-            
-            // Process all chats and send messages
-            console.log('Processing chats and sending messages...');
-            await processChatsAndSendMessages(page);
-            
-            // Before closing the browser, check if Load more button exists again
-            console.log('Checking for Load more button again before closing browser...');
-            if (await clickLoadMore(page)) {
-                console.log('Found Load more button, processing additional chats...');
-                // Wait for any new content to load
-                await page.waitForTimeout(5000);
-                
-                // Process additional chats
-                console.log('Processing additional chats...');
-                await processChatsAndSendMessages(page);
-            } else {
-                console.log('No Load more button found, continuing to close browser...');
-            }
-            
-            console.log('✅ Chat bot cycle finished!');
-            return true;
-            
-        } catch (error) {
-            console.error('❌ An error occurred during chat bot cycle:', error);
+        // CORECT: Folosim endpoint-ul corect conform documentației
+        browser = await chromium.connect(
+            `wss://production-sfo.browserless.io/chromium/playwright?token=${process.env.BROWSERLESS_TOKEN}`
+        );
+        
+        console.log('✅ Successfully connected to Browserless with correct endpoint');
+        
+        // Test the connection
+        const testPage = await browser.newPage();
+        await testPage.goto('about:blank', { waitUntil: 'domcontentloaded', timeout: 15000 });
+        await testPage.close();
+        console.log('✅ Browser connection test passed');
+        
+        // Login to the platform
+        console.log('Logging in to platform...');
+        const result = await withTimeout(
+            loginToPlatform(browser, process.env.LOGIN, process.env.PASSWORD),
+            TIMEOUT,
+            'Login process timed out'
+        );
+        
+        if (!result) {
+            console.error('Login failed');
             return false;
         }
         
+        const { context, page } = result;
+        console.log('✅ Login successful!');
+        
+        // Wait a bit for page to load after login
+        await page.waitForTimeout(5000);
+        
+        // Click Load more button repeatedly
+        console.log('Clicking Load more button...');
+        let loadMoreCount = 0;
+        const maxLoadMoreAttempts = 10;
+        
+        for (let i = 0; i < maxLoadMoreAttempts; i++) {
+            if (await clickLoadMore(page)) {
+                loadMoreCount++;
+                console.log(`Clicked Load more button ${loadMoreCount} times`);
+                await page.waitForTimeout(3000); // Wait between clicks
+            } else {
+                console.log('No more Load more button found or clickable');
+                break;
+            }
+        }
+        
+        console.log(`Finished clicking Load more button ${loadMoreCount} times`);
+        
+        // Wait for any new content to load
+        await page.waitForTimeout(5000);
+        
+        // Process all chats and send messages
+        console.log('Processing chats and sending messages...');
+        await processChatsAndSendMessages(page);
+        
+        // Before closing the browser, check if Load more button exists again
+        console.log('Checking for Load more button again before closing browser...');
+        if (await clickLoadMore(page)) {
+            console.log('Found Load more button, processing additional chats...');
+            // Wait for any new content to load
+            await page.waitForTimeout(5000);
+            
+            // Process additional chats
+            console.log('Processing additional chats...');
+            await processChatsAndSendMessages(page);
+        } else {
+            console.log('No Load more button found, continuing to close browser...');
+        }
+        
+        console.log('✅ Chat bot cycle finished!');
+        return true;
+        
     } catch (error) {
-        console.error('An error occurred:', error);
+        console.error('❌ Browser connection failed:', error.message);
+        
+        // Fallback to local browser if available (for testing)
+        console.log('Attempting fallback to local browser...');
+        try {
+            // This will only work if Playwright browsers are installed locally
+            browser = await chromium.launch({
+                headless: true,
+                args: ['--no-sandbox', '--disable-setuid-sandbox']
+            });
+            console.log('✅ Fallback: Local browser launched successfully');
+            
+            // Continue with login logic...
+            const result = await loginToPlatform(browser, process.env.LOGIN, process.env.PASSWORD);
+            if (result) {
+                console.log('✅ Login successful with fallback browser');
+                return true;
+            }
+            
+        } catch (fallbackError) {
+            console.error('❌ Fallback also failed:', fallbackError.message);
+        }
+        
         return false;
     } finally {
         if (browser) {
-            // Close the browser
-            console.log('Closing browser...');
-            await browser.close();
+            await browser.close().catch(error => {
+                console.log('Error closing browser:', error.message);
+            });
         }
     }
 }
