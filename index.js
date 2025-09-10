@@ -191,7 +191,7 @@ async function loginToAlphaDate(browser, email, password) {
     try {
         // Go to https://alpha.date
         console.log('Navigating to https://alpha.date...');
-        await page.goto('https://alpha.date/chat', { waitUntil: 'networkidle', timeout: TIMEOUT });
+        await page.goto('https://alpha.date', { waitUntil: 'networkidle', timeout: TIMEOUT });
         console.log('✅ Page loaded successfully');
         
         // Wait for and fill email & password using multiple fallback selectors
@@ -356,7 +356,7 @@ async function loginToPlatform(browser, email, password) {
     console.log('Logging in to platform...');
     
     // Check platform URL (process.env.PLATFORM_URL)
-    const platformUrl = process.env.PLATFORM_URL || 'https://alpha.date/chat';
+    const platformUrl = process.env.PLATFORM_URL || 'https://alpha.date';
     console.log(`Platform URL: ${platformUrl}`);
     
     // If alpha.date → call loginToAlphaDate()
@@ -656,9 +656,10 @@ async function runChatBotCycle() {
         console.log('Attempting to connect to Browserless with correct endpoint...');
         
         // CORECT: Folosim endpoint-ul corect conform documentației
-        browser = await chromium.connect(
-            `wss://production-sfo.browserless.io/chromium/playwright?token=${process.env.BROWSERLESS_TOKEN}`
-        );
+        browser = await chromium.connect({
+    wsEndpoint: `wss://production-sfo.browserless.io/chromium/playwright?token=${process.env.BROWSERLESS_TOKEN}`
+});
+
         
         console.log('✅ Successfully connected to Browserless with correct endpoint');
         
