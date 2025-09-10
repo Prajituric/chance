@@ -179,8 +179,11 @@ async function loginToAlphaDate(browser, email, password) {
     
     // Hide automation flags (navigator.webdriver)
     await context.addInitScript(() => {
-        Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-    });
+    Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+    Object.defineProperty(navigator, 'languages', { get: () => ['en-US', 'en'] });
+    Object.defineProperty(navigator, 'plugins', { get: () => [1,2,3,4,5] });
+});
+
     
     const page = await context.newPage();
     console.log('✅ Browser context and page created');
@@ -191,8 +194,8 @@ async function loginToAlphaDate(browser, email, password) {
     try {
         // Go to https://alpha.date
         console.log('Navigating to https://alpha.date...');
-        await page.goto('https://alpha.date', { waitUntil: 'networkidle', timeout: TIMEOUT });
-        console.log('✅ Page loaded successfully');
+        await page.goto('https://alpha.date/chat', { waitUntil: 'domcontentloaded', timeout: 120000 }); // 120s timeout
+
         
         // Wait for and fill email & password using multiple fallback selectors
         console.log('Filling in login credentials...');
