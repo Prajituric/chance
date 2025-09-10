@@ -642,9 +642,9 @@ async function processChatsAndSendMessages(page) {
 // Function to run the main process for one cycle
 async function runChatBotCycle() {
     console.log('Starting chat bot cycle...');
-    
+    let browser;
     try {
-        const browser = await chromium.launch({
+        browser = await chromium.launch({
             headless: false,
             args: [
                 '--no-sandbox',
@@ -714,21 +714,17 @@ async function runChatBotCycle() {
         } catch (error) {
             console.error('❌ An error occurred during chat bot cycle:', error);
             return false;
-        } finally {
-            // Close the browser
-            console.log('Closing browser...');
-            await browser.close().catch(error => {
-                console.log('Error closing browser:', error.message);
-            });
         }
         
     } catch (error) {
         console.error('An error occurred:', error);
         return false;
     } finally {
-        // Close the browser
-        console.log('Closing browser...');
-        await browser.close();
+        if (browser) {
+            // Close the browser
+            console.log('Closing browser...');
+            await browser.close();
+        }
     }
 }
 
