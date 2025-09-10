@@ -1,7 +1,7 @@
 require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
-const { chromium } = require('playwright');
+const { chromium } = require('playwright-core');
 
 // Load icebreaker messages
 const icebreakers = JSON.parse(fs.readFileSync(path.join(__dirname, 'icebreakers.json'), 'utf-8'));
@@ -646,17 +646,8 @@ async function processChatsAndSendMessages(page) {
 async function runChatBotCycle() {
     console.log('Starting chat bot cycle...');
     
-    // Launch browser with options to hide automation indicators
-    const browser = await chromium.launch({
-    headless: true,
-    args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-blink-features=AutomationControlled'
-    ]
-});
-
+    // Connect to Browserless instead of launching locally
+    const browser = await chromium.connect({ wsEndpoint: process.env.BROWSERLESS_URL });
     
     try {
         // Login to the platform
