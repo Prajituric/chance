@@ -3,6 +3,19 @@ const fs = require('fs');
 const path = require('path');
 const { chromium } = require('playwright-core');
 
+// Global timeout configuration
+const TIMEOUT = 60000; // 60 seconds timeout
+
+// Helper function for timeout promises
+function withTimeout(promise, timeoutMs, errorMessage = 'Operation timed out') {
+    return Promise.race([
+        promise,
+        new Promise((_, reject) => 
+            setTimeout(() => reject(new Error(errorMessage)), timeoutMs)
+        )
+    ]);
+}
+
 // Load icebreaker messages
 const icebreakers = JSON.parse(fs.readFileSync(path.join(__dirname, 'icebreakers.json'), 'utf-8'));
 
@@ -123,7 +136,7 @@ async function login(page, email, password) {
         ];
         
         let loginButtonClicked = false;
-        for (const selector of loginButtonSelectors) {
+        for (selector of loginButtonSelectors) {
             try {
                 if (await page.isVisible(selector)) {
                     console.log(`Clicking login button with selector: ${selector}`);
@@ -170,6 +183,7 @@ async function loginToAlphaDate(browser, email, password) {
     });
     
     const page = await context.newPage();
+    console.log('✅ Browser context and page created');
     
     // Check for error popup before proceeding
     await handleSpecificErrorPopup(page);
@@ -177,7 +191,8 @@ async function loginToAlphaDate(browser, email, password) {
     try {
         // Go to https://alpha.date
         console.log('Navigating to https://alpha.date...');
-        await page.goto('https://alpha.date');
+        await page.goto('https://alpha.date', { waitUntil: 'networkidle', timeout: TIMEOUT });
+        console.log('✅ Page loaded successfully');
         
         // Wait for and fill email & password using multiple fallback selectors
         console.log('Filling in login credentials...');
@@ -203,8 +218,9 @@ async function loginToAlphaDate(browser, email, password) {
         let emailFieldFound = false;
         for (const selector of emailSelectors) {
             try {
+                await page.waitForSelector(selector, { timeout: 10000 });
                 if (await page.isVisible(selector)) {
-                    console.log(`Filling email with selector: ${selector}`);
+                    console.log(`✅ Filling email with selector: ${selector}`);
                     await humanType(page, selector, email);
                     emailFieldFound = true;
                     break;
@@ -222,8 +238,9 @@ async function loginToAlphaDate(browser, email, password) {
         let passwordFieldFound = false;
         for (const selector of passwordSelectors) {
             try {
+                await page.waitForSelector(selector, { timeout: 10000 });
                 if (await page.isVisible(selector)) {
-                    console.log(`Filling password with selector: ${selector}`);
+                    console.log(`✅ Filling password with selector: ${selector}`);
                     await humanType(page, selector, password);
                     passwordFieldFound = true;
                     break;
@@ -250,8 +267,9 @@ async function loginToAlphaDate(browser, email, password) {
         let loginButtonClicked = false;
         for (const selector of loginButtonSelectors) {
             try {
+                await page.waitForSelector(selector, { timeout: 10000 });
                 if (await page.isVisible(selector)) {
-                    console.log(`Clicking login button with selector: ${selector}`);
+                    console.log(`✅ Clicking login button with selector: ${selector}`);
                     await page.click(selector);
                     loginButtonClicked = true;
                     break;
@@ -285,7 +303,7 @@ async function loginToAlphaDate(browser, email, password) {
         for (const selector of successIndicators) {
             try {
                 if (await page.isVisible(selector)) {
-                    console.log(`Login verified with indicator: ${selector}`);
+                    console.log(`✅ Login verified with indicator: ${selector}`);
                     loginVerified = true;
                     break;
                 }
@@ -325,10 +343,10 @@ async function loginToAlphaDate(browser, email, password) {
             console.log('Could not find Chance menu item');
         }
         
-        console.log('Alpha.Date login completed successfully');
+        console.log('✅ Alpha.Date login completed successfully');
         return { context, page };
     } catch (error) {
-        console.error('Alpha.Date login failed:', error.message);
+        console.error('❌ Alpha.Date login failed:', error.message);
         return null;
     }
 }
@@ -633,76 +651,94 @@ async function processChatsAndSendMessages(page) {
 async function runChatBotCycle() {
     console.log('Starting chat bot cycle...');
     
-    // Connect to Browserless instead of launching locally - FIXED LINE
-    const browser = await chromium.connect({
-    wsEndpoint: `wss://production-sfo.browserless.io?token=${process.env.BROWSERLESS_TOKEN}`
-});
-    
     try {
-        // Login to the platform
-        console.log('Logging in to platform...');
-        const result = await loginToPlatform(browser, process.env.LOGIN, process.env.PASSWORD);
+        // Connect to Browserless with timeout
+        const browser = await withTimeout(
+            chromium.connect({
+                wsEndpoint: `wss://production-sfo.browserless.io?token=${process.env.BROWSERLESS_TOKEN}`
+            }),
+            TIMEOUT,
+            'Browser connection timed out'
+        );
         
-        if (!result) {
-            console.error('Login failed');
-            return false;
-        }
+        console.log('✅ Successfully connected to Browserless');
         
-        const { context, page } = result;
-        console.log('Login successful!');
-        
-        // Wait a bit for page to load after login
-        await page.waitForTimeout(5000);
-        
-        // Click Load more button repeatedly
-        console.log('Clicking Load more button...');
-        let loadMoreCount = 0;
-        const maxLoadMoreAttempts = 10;
-        
-        for (let i = 0; i < maxLoadMoreAttempts; i++) {
-            if (await clickLoadMore(page)) {
-                loadMoreCount++;
-                console.log(`Clicked Load more button ${loadMoreCount} times`);
-                await page.waitForTimeout(3000); // Wait between clicks
-            } else {
-                console.log('No more Load more button found or clickable');
-                break;
+        try {
+            // Login to the platform
+            console.log('Logging in to platform...');
+            const result = await withTimeout(
+                loginToPlatform(browser, process.env.LOGIN, process.env.PASSWORD),
+                TIMEOUT,
+                'Login process timed out'
+            );
+            
+            if (!result) {
+                console.error('Login failed');
+                return false;
             }
-        }
-        
-        console.log(`Finished clicking Load more button ${loadMoreCount} times`);
-        
-        // Wait for any new content to load
-        await page.waitForTimeout(5000);
-        
-        // Process all chats and send messages
-        console.log('Processing chats and sending messages...');
-        await processChatsAndSendMessages(page);
-        
-        // Before closing the browser, check if Load more button exists again
-        console.log('Checking for Load more button again before closing browser...');
-        if (await clickLoadMore(page)) {
-            console.log('Found Load more button, processing additional chats...');
+            
+            const { context, page } = result;
+            console.log('✅ Login successful!');
+            
+            // Wait a bit for page to load after login
+            await page.waitForTimeout(5000);
+            
+            // Click Load more button repeatedly
+            console.log('Clicking Load more button...');
+            let loadMoreCount = 0;
+            const maxLoadMoreAttempts = 10;
+            
+            for (let i = 0; i < maxLoadMoreAttempts; i++) {
+                if (await clickLoadMore(page)) {
+                    loadMoreCount++;
+                    console.log(`Clicked Load more button ${loadMoreCount} times`);
+                    await page.waitForTimeout(3000); // Wait between clicks
+                } else {
+                    console.log('No more Load more button found or clickable');
+                    break;
+                }
+            }
+            
+            console.log(`Finished clicking Load more button ${loadMoreCount} times`);
+            
             // Wait for any new content to load
             await page.waitForTimeout(5000);
             
-            // Process additional chats
-            console.log('Processing additional chats...');
+            // Process all chats and send messages
+            console.log('Processing chats and sending messages...');
             await processChatsAndSendMessages(page);
-        } else {
-            console.log('No Load more button found, continuing to close browser...');
+            
+            // Before closing the browser, check if Load more button exists again
+            console.log('Checking for Load more button again before closing browser...');
+            if (await clickLoadMore(page)) {
+                console.log('Found Load more button, processing additional chats...');
+                // Wait for any new content to load
+                await page.waitForTimeout(5000);
+                
+                // Process additional chats
+                console.log('Processing additional chats...');
+                await processChatsAndSendMessages(page);
+            } else {
+                console.log('No Load more button found, continuing to close browser...');
+            }
+            
+            console.log('✅ Chat bot cycle finished!');
+            return true;
+            
+        } catch (error) {
+            console.error('❌ An error occurred during chat bot cycle:', error);
+            return false;
+        } finally {
+            // Close the browser
+            console.log('Closing browser...');
+            await browser.close().catch(error => {
+                console.log('Error closing browser:', error.message);
+            });
         }
         
-        console.log('Chat bot cycle finished!');
-        return true;
-        
     } catch (error) {
-        console.error('An error occurred:', error);
+        console.error('❌ Browser connection failed:', error.message);
         return false;
-    } finally {
-        // Close the browser
-        console.log('Closing browser...');
-        await browser.close();
     }
 }
 
